@@ -9,5 +9,4 @@ if __name__ == '__main__':
     session = session.Session()
     main_window = MainWindow.MainWindow(session)
     main_window.show()
-    app.exec_()
-
+    sys.exit(app.exec_())
