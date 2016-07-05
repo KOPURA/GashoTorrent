@@ -10,7 +10,7 @@ class InfoGetter:
             result = cls.__get_torrent_info(torrent_file.read())
 
         return result
- 
+
     @classmethod
     def get_bytes_from_URL(cls, torrent_file_URL):
         result = None

@@ -1,0 +1,2 @@
+class TorrentListFullException(Exception):
+    pass

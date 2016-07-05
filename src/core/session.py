@@ -1,28 +1,113 @@
 import libtorrent as lt
-from core.alert_dispatcher import AlertDispatcher
-from core.torrent_info_getter import InfoGetter
+from core.util import Utility, SafeQueue
+from core.data_producer import DataProducer
+from core.exceptions import TorrentListFullException
+import logging
+import os
 
 
 class Session(lt.session):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    FINGERPRINT_ID = "GT"
 
-        self.isAlive = True
+    def __init__(self, config_file_path):
+        fingerprint = lt.fingerprint(self.FINGERPRINT_ID, 1, 0, 1, 1)
+        super().__init__(fingerprint)
 
-        self.__dispatch_alerts()
-        self.InfoGetter = InfoGetter
+        self.alive = True
+        self.config_file_path = config_file_path
+        self.config = Utility.load_config_file(config_file_path)
 
-        # self.listen_on(# get from conf, #get from con)
+        self.listen_on(self.config['port_start'], self.config['port_end'])
+        self.configure_session(self.config)
+
+        # Initialize the data producer
+        self.data_queue = SafeQueue(self.config['max_torrents'])
+        self.producer = DataProducer(self, 0.5, 0.1)
+        self.producer.start()
+
+    def configure_session(self, config):
+        settings = {'download_rate_limit': config['max_download_speed'],
+                    'upload_rate_limit': config['max_upload_speed'],
+                    'active_downloads': config['max_active_downloads'],
+                    'active_seeds': config['max_active_seeds']}
+        self.apply_settings(settings)
+        # Uncomment the next line to enable all alerts
+        # self.set_alert_mask(0x7fffffff)
+
+    def reconfigure(self, new_config):
+        self.config = new_config
+        self.configure_session(new_config)
+        self.data_queue.set_limit(new_config['max_torrents'])
+        Utility.update_config_file(self.config_file_path, new_config)
 
     def destruct_session(self):
-        self.isAlive = False
+        if self.config['resume_data']:
+            handles = list(filter(Utility.has_metadata, self.get_torrents()))
+            paths = list(map(Utility.handle_fastresume_path, handles))
+            data = [lt.bencode(h.write_resume_data()) for h in handles]
+            for path, data in zip(paths, data):
+                open(path, "wb").write(data)
 
-    def add_torrent(self, name):
-        pass
+        self.alive = False
+        self.producer.join()
+        del self
 
-    # Make additional thread to read alerts
-    def __dispatch_alerts(self):
-        dispatch = AlertDispatcher(self)
-        dispatch.start()
+    def get_config(self):
+        return self.config
 
-# TO DO: Add some represenation of the torrents queue
+    def getHandleFromHash(self, hash_):
+        for handle in self.get_torrents():
+            if hash_ == handle.info_hash():
+                return handle
+
+        return None
+
+    def is_alive(self):
+        return self.alive
+
+    def add_torrent(self, data):
+        if len(self.get_torrents()) == self.config['max_torrents']:
+            raise TorrentListFullException
+
+        params = {'ti': data['info'],
+                  'save_path': data['destination_folder'],
+                  'paused': False,
+                  'auto_managed': True,
+                  'duplicate_is_error': True}
+
+        path = Utility.fastresume_path(data['info'].name(),
+                                       data['destination_folder'])
+        try:
+            params['resume_data'] = open(path, 'rb').read()
+        except:
+            logging.info("No resume data for " + data['info'].name())
+
+        handle = super().add_torrent(params)
+        handle.set_priority(data['torrent_priority'])
+        handle.prioritize_files(data['file_priorities'])
+        if handle.is_valid():
+            return handle.info_hash()
+
+        return None
+
+    @staticmethod
+    def toggle_pause(torrent_handle):
+        if torrent_handle:
+            status = torrent_handle.status()
+            if status.paused:
+                torrent_handle.auto_managed(True)
+                torrent_handle.resume()
+            else:
+                torrent_handle.auto_managed(False)
+                torrent_handle.pause()
+
+    def remove_torrent(self, handle, with_files=False):
+        try:
+            os.remove(Utility.handle_fastresume_path(handle))
+        except:
+            pass
+
+        if with_files:
+            super().remove_torrent(handle, lt.options_t.delete_files)
+        else:
+            super().remove_torrent(handle)

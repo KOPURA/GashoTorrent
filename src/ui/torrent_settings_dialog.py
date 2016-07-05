@@ -5,22 +5,22 @@ from PyQt5.QtWidgets import (QDialog,
                              QFileDialog,
                              QLabel,
                              QPushButton,
-                             QButtonGroup,
                              QComboBox,
                              QTreeWidget,
                              QTreeWidgetItem,
+                             QTreeWidgetItemIterator,
                              QLineEdit)
-from PyQt5.QtCore import Qt, QStandardPaths as paths
+from PyQt5.QtCore import pyqtSignal, Qt, QStandardPaths as paths
 from core import file_tree
-from math import log, floor
-    
+from core.util import Utility
+
 
 class TreeNodeItem(QTreeWidgetItem):
     def __init__(self, root, *args):
         super().__init__(*args)
 
         self.setText(0, root.path)
-        self.setText(1, self.processSize(root.size))
+        self.setText(1, Utility.process_size(root.size))
         self.setText(2, 'Normal')
 
         if not root.is_leaf():
@@ -31,16 +31,10 @@ class TreeNodeItem(QTreeWidgetItem):
         for child in root.children:
             self.addChild(TreeNodeItem(child))
 
-    def processSize(self, size):
-        suffixes = ['KB', 'MB', 'GB', 'TB', 'PB']
-        if size:
-            power = floor(log(size, 1024))
-            return str(round(size / 1024**power, 2)) + suffixes[power - 1]
-        else:
-            return "0 KB"
-        
 
 class TorrentPreferencesDialog(QDialog):
+    dataReady = pyqtSignal(dict)
+
     def __init__(self, parent, torrent_info):
         super().__init__(parent)
         self.torrentInfo = torrent_info
@@ -66,60 +60,59 @@ class TorrentPreferencesDialog(QDialog):
 
     def setUpDialogHeader(self):
         headerLayout = QGridLayout()
-        defaultDir = paths.writableLocation(paths.DownloadLocation)
+        self.destinationFolder = paths.writableLocation(paths.DownloadLocation)
         torrentName = self.torrentInfo.name()
 
         # Show the torrent name row
-        nameLabel = QLabel("Torrent name:")
+        nameLabel = QLabel("Torrent name:", self)
         headerLayout.addWidget(nameLabel, 0, 0)
 
-        nameEdit = QLineEdit(torrentName)
+        nameEdit = QLineEdit(torrentName, self)
         nameEdit.setReadOnly(True)
         headerLayout.addWidget(nameEdit, 0, 1)
 
         # Show the destination folder row
-        dirLabel = QLabel("Destination folder:")
+        dirLabel = QLabel("Destination folder:", self)
         headerLayout.addWidget(dirLabel, 1, 0)
 
-        self.textField = QLineEdit(defaultDir)
+        self.textField = QLineEdit(self.destinationFolder, self)
         self.textField.setReadOnly(True)
         headerLayout.addWidget(self.textField, 1, 1)
 
-        button = QPushButton("Browse")
+        button = QPushButton("Browse", self)
         button.clicked.connect(self.selectFolder)
         headerLayout.addWidget(button, 1, 2)
 
         self.layout.addLayout(headerLayout)
 
     def selectFolder(self):
-        newDir = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
+        newDir = str(QFileDialog.getExistingDirectory(self,
+                                                      "Select Directory"))
         if newDir:
             self.textField.setText(newDir)
-
+            self.destinationFolder = newDir
 
     def setUpFileLister(self):
-        files = [(f.path, f.size) for f in self.torrentInfo.files()]
-        treeView = QTreeWidget()
-        treeView.setColumnCount(3)
-        treeView.setColumnWidth(0, 350)
-        treeView.setColumnWidth(1, 80)
-        treeView.setHeaderLabels(["Name", "size", "Priority"])
+        self.files = [(f.path, f.size) for f in self.torrentInfo.files()]
+        self.treeView = QTreeWidget(self)
+        self.treeView.setColumnCount(3)
+        self.treeView.setColumnWidth(0, 350)
+        self.treeView.setColumnWidth(1, 80)
+        self.treeView.setHeaderLabels(["Name", "size", "Priority"])
+        self.treeView.setExpandsOnDoubleClick(False)
 
-        if len(files) == 1:
-            tree = file_tree.FileTree(files[0][0], files[0][1])
+        if len(self.files) == 1:
+            tree = file_tree.FileTree(self.files[0][0], self.files[0][1])
         else:
-            tree = file_tree.FileTree(files[0][0].split('/')[0], 0)
-            for f in files:
+            tree = file_tree.FileTree(self.files[0][0].split('/')[0], 0)
+            for f in self.files:
                 tree.add_file(f[0], f[1])
-        
-        rootItem = TreeNodeItem(tree.get_root())
-        treeView.addTopLevelItem(rootItem)
-        treeView.expandAll()
-        treeView.itemClicked.connect(self.rowClicked)
-        # TO DO: Add whole torrent priority combo box
-        # TO DO: Add fetch data method
-        # TO DO: Add some controls for checking and unchecking all of the files
-        self.layout.addWidget(treeView)
+
+        rootItem = TreeNodeItem(tree.get_root(), self.treeView)
+        self.treeView.addTopLevelItem(rootItem)
+        self.treeView.expandAll()
+        self.treeView.itemClicked.connect(self.rowClicked)
+        self.layout.addWidget(self.treeView)
 
     def rowClicked(self, item, column):
         if item.checkState(0) == Qt.PartiallyChecked:
@@ -143,11 +136,11 @@ class TorrentPreferencesDialog(QDialog):
     def reprioritize(self, start_node):
         parent = start_node.parent()
         if parent:
-            if  self.allChildrenHaveSamePriority(parent):
+            if self.allChildrenHaveSamePriority(parent):
                 parent.setText(2, start_node.text(2))
             else:
                 parent.setText(2, "Mixed")
-            
+
             self.reprioritize(parent)
 
     def allChildrenHaveSamePriority(self, node):
@@ -162,15 +155,17 @@ class TorrentPreferencesDialog(QDialog):
         footerLayout.setColumnStretch(0, 4)
 
         footerLayout.addWidget(QLabel("Torrent priority"), 0, 1)
-        priorityComboBox = QComboBox()
-        priorityComboBox.addItems(["High", "Normal", "Low"])
-        footerLayout.addWidget(priorityComboBox, 0, 2)
+        self.priorityComboBox = QComboBox(self)
+        self.priorityComboBox.addItems(["High", "Normal", "Low"])
+        self.priorityComboBox.setCurrentIndex(1)
+        footerLayout.addWidget(self.priorityComboBox, 0, 2)
 
         secondRowLayout = QHBoxLayout()
 
-        OKButton = QPushButton("Open")
+        OKButton = QPushButton("Open", self)
+        OKButton.setFocus()
         OKButton.clicked.connect(self.accept)
-        cancelButton = QPushButton("Cancel")
+        cancelButton = QPushButton("Cancel", self)
         cancelButton.clicked.connect(self.reject)
         secondRowLayout.addWidget(OKButton)
         secondRowLayout.addWidget(cancelButton)
@@ -179,5 +174,46 @@ class TorrentPreferencesDialog(QDialog):
         self.layout.addLayout(footerLayout)
 
     def accept(self):
-        print("Accepted") # To be implemented
+        torrentPriorities = {"Low": 0, "Normal": 127, "High": 255}
+        filePriorities = {"Low": 1, "Normal": 4, "High": 7}
+
+        it = QTreeWidgetItemIterator(self.treeView,
+                                     QTreeWidgetItemIterator.NoChildren)
+
+        itemsInfo = {}
+        while it.value():
+            currentItem = it.value()
+            if currentItem.checkState(0) == Qt.Unchecked:
+                priority = 0
+            else:
+                priority = filePriorities[currentItem.text(2)]
+
+            itemsInfo[self.getFullPath(currentItem)] = priority
+            it += 1
+
+        paths = [f.path for f in self.torrentInfo.files()]
+        self.prioritiesList = [itemsInfo[p] for p in paths]
+
+        comboBoxIndex = self.priorityComboBox.currentIndex()
+        self.priority = torrentPriorities[self.priorityComboBox.itemText(
+                                                                comboBoxIndex)]
+
+        self.hide()
+        self.dataReady.emit(self.getData())
         super().accept()
+
+    def getFullPath(self, treeItem):
+        items = [treeItem.text(0)]
+        parent = treeItem.parent()
+
+        while parent:
+            items.append(parent.text(0))
+            parent = parent.parent()
+
+        return '/'.join(reversed(items))
+
+    def getData(self):
+        return {'info': self.torrentInfo,
+                'destination_folder': self.destinationFolder,
+                'torrent_priority': self.priority,
+                'file_priorities': self.prioritiesList}

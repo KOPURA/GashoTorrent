@@ -6,7 +6,7 @@ For example:
     - A torrent which contains the file FILE1
     - A torrent which contains more files, but all of them are automatically
     put in a root directory : ROOT/FILE1, ROOT/DIR1/FILE2 and so on..
-When adding a file, the path must be absolute and must start with the 
+When adding a file, the path must be absolute and must start with the
 root directory. For example:
 
 Suppose, that the root directory is TorrentFolder.
@@ -19,6 +19,8 @@ If the torrent contains only one file, it should be added in the tree when
 initialized, with other words - the filename must be passed to the __init__
 method of FileTree.
 """
+
+
 class TreeNode:
     def __init__(self, path, size=0):
         self.path = path
@@ -48,7 +50,7 @@ class FileTree:
     def add_file(self, path, size):
         if '/' not in path:
             return
-        
+
         parts = path.split('/')[1:]
         self.add_recursively(self.root, parts, size)
 
@@ -60,7 +62,7 @@ class FileTree:
             if not child:
                 node.add_child(TreeNode(dirs[0]))
                 child = node[dirs[0]]
-            
+
             self.add_recursively(child, dirs[1:], size)
 
     def get_root(self):
