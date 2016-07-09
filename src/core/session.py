@@ -7,6 +7,11 @@ import os
 
 
 class Session(lt.session):
+    """
+    This class represents the main core structure. It is a little "addition"
+    to libtorrent's session class, which allows easier use and integration
+    with the UI, which uses it.
+    """
     FINGERPRINT_ID = "GT"
 
     def __init__(self, config_file_path):
@@ -18,14 +23,14 @@ class Session(lt.session):
         self.config = Utility.load_config_file(config_file_path)
 
         self.listen_on(self.config['port_start'], self.config['port_end'])
-        self.configure_session(self.config)
+        self.__configure_session(self.config)
 
         # Initialize the data producer
         self.data_queue = SafeQueue(self.config['max_torrents'])
         self.producer = DataProducer(self, 0.5, 0.1)
         self.producer.start()
 
-    def configure_session(self, config):
+    def __configure_session(self, config):
         settings = {'download_rate_limit': config['max_download_speed'],
                     'upload_rate_limit': config['max_upload_speed'],
                     'active_downloads': config['max_active_downloads'],
@@ -36,7 +41,7 @@ class Session(lt.session):
 
     def reconfigure(self, new_config):
         self.config = new_config
-        self.configure_session(new_config)
+        self.__configure_session(new_config)
         self.data_queue.set_limit(new_config['max_torrents'])
         Utility.update_config_file(self.config_file_path, new_config)
 
@@ -46,7 +51,8 @@ class Session(lt.session):
             paths = list(map(Utility.handle_fastresume_path, handles))
             data = [lt.bencode(h.write_resume_data()) for h in handles]
             for path, data in zip(paths, data):
-                open(path, "wb").write(data)
+                with open(path, "wb") as fr_file:
+                    fr_file.write(data)
 
         self.alive = False
         self.producer.join()
@@ -79,6 +85,7 @@ class Session(lt.session):
                                        data['destination_folder'])
         try:
             params['resume_data'] = open(path, 'rb').read()
+            os.remove(path)
         except:
             logging.info("No resume data for " + data['info'].name())
 
@@ -102,11 +109,6 @@ class Session(lt.session):
                 torrent_handle.pause()
 
     def remove_torrent(self, handle, with_files=False):
-        try:
-            os.remove(Utility.handle_fastresume_path(handle))
-        except:
-            pass
-
         if with_files:
             super().remove_torrent(handle, lt.options_t.delete_files)
         else:

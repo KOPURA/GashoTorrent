@@ -27,15 +27,18 @@ class QueueMovements(Enum):
 
 
 class MainTable(QTreeWidget):
+    """
+    Modified QTreeWidget, so it can store the hash-codes of all torrents,
+    move items up and down, and get items from hashes. This way it is easy
+    to know which row in the widget matches exactly which torrent handle.
+    """
     def __init__(self, *args):
         super().__init__(*args)
 
-        # self.indices = {}
         self.indices = []
 
     def addItem(self, item, itemHash):
         self.addTopLevelItem(item)
-        # self.indices[itemHash] = self.topLevelItemCount() - 1
         self.indices.append(itemHash)
 
     def addItemAt(self, item, itemHash, pos):
@@ -92,6 +95,10 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(dict)
     def updateTable(self, data):
+        """
+        This slot must be decorated with pyqtSlot because the signal,
+        wchich invokes it is being emitted in another thread.
+        """
         mainWidget = self.centralWidget()
 
         item = mainWidget.getItemFromHash(data['hash'])
@@ -105,14 +112,17 @@ class MainWindow(QMainWindow):
 
             item.setText(0, data['name'])
             item.setText(1, data['state'])
+            item.setText(2, Utility.process_size(data['size']))
 
             if(data['progress'] < 0.0001):
-                item.setText(2, "0 %")
+                item.setText(3, "0 %")
             else:
-                item.setText(2, str(round(data['progress'] * 100, 2)) + " %")
+                item.setText(3, str(round(data['progress'] * 100, 2)) + " %")
 
-            item.setText(3, Utility.process_size(data['down_speed']) + '/S')
-            item.setText(4, Utility.process_size(data['up_speed']) + '/S')
+            item.setText(4, Utility.process_size(data['down_speed']) + '/S')
+            item.setText(5, Utility.process_size(data['up_speed']) + '/S')
+            item.setText(6, Utility.process_size(data['downloaded']))
+            item.setText(7, Utility.process_size(data['uploaded']))
 
     def setUp(self, width, height):
         self.setWindowTitle(Settings.WINDOW_NAME)
@@ -197,11 +207,12 @@ class MainWindow(QMainWindow):
 
     def setUpMainWidget(self):
         mainWidget = MainTable(self)
-        mainWidget.setColumnCount(5)
+        mainWidget.setColumnCount(8)
         mainWidget.setColumnWidth(0, 370)
         mainWidget.setColumnWidth(1, 130)
-        mainWidget.setHeaderLabels(['Name', 'State',
-                                    'Progress', 'Down', 'Up'])
+        mainWidget.setHeaderLabels(['Name', 'State', 'Size', 'Progress',
+                                    'Download speed', 'Upload speed',
+                                    'Downloaded', 'Uploaded'])
 
         self.setCentralWidget(mainWidget)
 
@@ -305,7 +316,7 @@ class MainWindow(QMainWindow):
                                               "Also remove downloaded files?")
 
         answer = question.exec_()
-        if torrentHandle and answer[0]:
+        if torrentHandle and answer[0] != 65536:
             mainWidget = self.centralWidget()
             mainWidget.removeItem(torrentHandle.info_hash())
 

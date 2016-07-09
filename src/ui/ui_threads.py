@@ -4,6 +4,12 @@ import logging
 
 
 class DataConsumer(QThread):
+    """
+    The UI's worker thread. It gets the data from session's
+    data queue and emits it to the mainWidget.
+    It inherits from QThread and not from threading.Thread, because
+    PyQt allows signals to be emitted only from QThreads.
+    """
     dataReceived = pyqtSignal(dict)
 
     def __init__(self, parent, session, timeout=2, wait_on_tick=0.2):

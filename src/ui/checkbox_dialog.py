@@ -3,6 +3,9 @@ from PyQt5.QtWidgets import (QMessageBox,
 
 
 class CheckboxedMessageBox(QMessageBox):
+    """
+    Just a message box, which has a checkbox.
+    """
     def __init__(self, parent,  title, text, checkboxText):
         super().__init__(parent)
 

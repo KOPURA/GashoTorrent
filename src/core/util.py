@@ -7,9 +7,15 @@ import os
 class Utility:
     @staticmethod
     def process_size(size):
+        """
+        It receives a number, which represents a size in bytes and converts
+        the number to a more human-readable format as string.
+        """
         suffixes = ['KB', 'MB', 'GB', 'TB', 'PB', 'B']
         if size:
             power = floor(log(size, 1024))
+            if power > 5:
+                power = 5
             return (str(round(size / (1024**power), 2)) + " " +
                     suffixes[power - 1])
 
@@ -36,21 +42,37 @@ class Utility:
 
     @staticmethod
     def has_metadata(handle):
-        return handle.is_valid() and \
-               handle.has_metadata() and \
-               handle.status().state > 2
+        """
+        Used for a predicate to filter these torrent handles, for which
+        a .fastresume file should be generated.
+        """
+        return all([handle.is_valid(),
+                   handle.has_metadata(),
+                   handle.status().state > 2])
 
     @staticmethod
     def handle_fastresume_path(handle):
-        return os.path.join(handle.save_path(),
-                            handle.get_torrent_info().name() + ".fastresume")
+        """
+        Builds the .fastresume file path of the given handle.
+        """
+        return Utility.fastresume_path(handle.get_torrent_info().name(),
+                                       handle.save_path())
 
     @staticmethod
     def fastresume_path(name, save_path):
+        """
+        Builds the fastresume path of a torrent given its name and
+        save path
+        """
         return os.path.join(save_path, name + ".fastresume")
 
 
 class SafeQueue:
+    """
+    This class represents a thread-safe queue structure. It is used for
+    the communication between the core's worker thread and the UI's worker
+    thread.
+    """
     def __init__(self, limit):
         self.data = []
 
@@ -85,7 +107,13 @@ class SafeQueue:
         return self.count == 0
 
     def full(self):
-        return self.count == self.limit
+        with self.lock:
+            return self.count == self.limit
 
     def free_slots(self):
-        return self.limit - self.count
+        with self.lock:
+            return self.limit - self.count
+
+    def get_limit(self):
+        with self.lock:
+            return self.limit

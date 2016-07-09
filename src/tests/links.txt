@@ -1,0 +1,3 @@
+["http://linuxtracker.org/download.php?id=d2d89b1269030333ce8b7acaccca56bd2facaa28&f=neon-useredition-20160705-0929-amd64.iso.torrent",
+"http://linuxtracker.org/download.php?id=2a87f77cbf6d14de64492ae706715d10f2859895&f=pclinuxos64-mate-2016.07.iso+.torrent",
+"http://linuxtracker.org/download.php?id=3b54e9d83a86150504177615d347fbedbf499b34&f=Clonezilla+Live+2.4.7+8+amd64.torrent"]

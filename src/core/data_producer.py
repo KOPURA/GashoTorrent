@@ -4,6 +4,13 @@ import logging
 
 
 class DataProducer(Thread):
+    """
+    This thread is the worker thread, which puts the information about
+    all the torrents that are currently in session in the session's
+    info queue. This information is later used by UI's worker thread
+    in order to be displayed on the screen.
+    """
+
     STATES = ['Queued', 'Checking', 'Downloading metadata', 'Downloading',
               'Finished', 'Seeding', 'Allocating', 'Checking fastresume']
 
@@ -36,6 +43,9 @@ class DataProducer(Thread):
                 data['down_speed'] = status.download_rate
                 data['up_speed'] = status.upload_rate
                 data['progress'] = status.progress
+                data['size'] = status.total_wanted
+                data['downloaded'] = status.total_download
+                data['uploaded'] = status.total_upload
                 if status.paused:
                     data['state'] = 'Paused'
                 else:

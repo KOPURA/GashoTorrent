@@ -3,6 +3,11 @@ import urllib.request
 
 
 class InfoGetter:
+    """
+    A 'static' class, used for getting the raw torrent file bytes
+    and converting them to torrent_info objects. It supports getting
+    data from the hard disk or from an url to the .torrent file.
+    """
     @classmethod
     def get_bytes_from_filesystem(cls, torrent_file_name):
         result = None
